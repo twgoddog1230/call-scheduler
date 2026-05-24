@@ -15,6 +15,9 @@ const pool = new Pool({
 app.use(cors())
 app.use(express.json({ limit: '2mb' }))
 
+console.log('VERSION: ssl-fix-v3')
+console.log('DB URL prefix:', process.env.DATABASE_URL?.slice(0, 30))
+
 let dbReady = false
 
 async function initDB(retries = 10, delay = 3000) {
