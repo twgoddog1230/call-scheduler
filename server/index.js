@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('railway') ? { rejectUnauthorized: false } : false,
+  ssl: false,
   connectionTimeoutMillis: 10000,
 })
 
