@@ -1,4 +1,4 @@
-name: Build & Push Server Image
+name: Deploy Server to Railway
 
 on:
   push:
@@ -7,40 +7,19 @@ on:
       - 'server/**'
       - '.github/workflows/docker.yml'
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/call-scheduler-server
-
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./server
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-
-      - name: Make package public
+      - name: Trigger Railway deployment
         run: |
-          curl -s -X PATCH \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/user/packages/container/call-scheduler-server" \
-            -d '{"visibility":"public"}' || true
+          curl -s -X POST https://backboard.railway.app/graphql/v2 \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"query\": \"mutation { serviceInstanceDeploy(environmentId: \\\"f5f4ef87-1dcf-4d4c-bc88-8fcc5d485e33\\\", serviceId: \\\"7c00e772-33a7-4100-81dc-1065ec9d736f\\\", commitSha: \\\"${{ github.sha }}\\\") }\"
+            }" | tee /tmp/railway_response.json
+          cat /tmp/railway_response.json | python3 -c "import json,sys; r=json.load(sys.stdin); print('Deployed!' if r.get('data',{}).get('serviceInstanceDeploy') else f'Error: {r}')"
