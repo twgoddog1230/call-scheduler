@@ -9,49 +9,58 @@ const PORT = process.env.PORT || 3000
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes('railway') ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000,
 })
 
 app.use(cors())
 app.use(express.json({ limit: '2mb' }))
 
-// 初始化資料表
-async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS sync_data (
-      code      VARCHAR(20) PRIMARY KEY,
-      data      JSONB       NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `)
-  console.log('DB ready')
+let dbReady = false
+
+async function initDB(retries = 10, delay = 3000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS sync_data (
+          code       VARCHAR(20)  PRIMARY KEY,
+          data       JSONB        NOT NULL,
+          updated_at TIMESTAMPTZ  DEFAULT NOW()
+        )
+      `)
+      dbReady = true
+      console.log('DB ready')
+      return
+    } catch (err) {
+      console.log(`DB not ready (attempt ${i + 1}/${retries}): ${err.message}`)
+      if (i < retries - 1) await new Promise(r => setTimeout(r, delay))
+    }
+  }
+  console.error('Could not connect to DB after retries, exiting')
+  process.exit(1)
 }
 
-// 讀取同步碼資料
-app.get('/api/:code', async (req, res) => {
-  const { code } = req.params
-  const result = await pool.query(
-    'SELECT data FROM sync_data WHERE code = $1', [code.toUpperCase()]
-  )
-  if (result.rows.length === 0) return res.json(null)
-  res.json(result.rows[0].data)
+app.get('/health', (_req, res) => {
+  res.json({ status: dbReady ? 'ok' : 'starting' })
 })
 
-// 儲存同步碼資料
-app.put('/api/:code', async (req, res) => {
+app.get('/api/:code', async (req, res) => {
+  if (!dbReady) return res.status(503).json({ error: 'starting' })
   const { code } = req.params
-  const data = req.body
+  const result = await pool.query('SELECT data FROM sync_data WHERE code = $1', [code.toUpperCase()])
+  res.json(result.rows.length === 0 ? null : result.rows[0].data)
+})
+
+app.put('/api/:code', async (req, res) => {
+  if (!dbReady) return res.status(503).json({ error: 'starting' })
+  const { code } = req.params
   await pool.query(
-    `INSERT INTO sync_data (code, data, updated_at)
-     VALUES ($1, $2, NOW())
+    `INSERT INTO sync_data (code, data, updated_at) VALUES ($1, $2, NOW())
      ON CONFLICT (code) DO UPDATE SET data = $2, updated_at = NOW()`,
-    [code.toUpperCase(), JSON.stringify(data)]
+    [code.toUpperCase(), JSON.stringify(req.body)]
   )
   res.json({ ok: true })
 })
 
-// 健康檢查
-app.get('/health', (_req, res) => res.json({ status: 'ok' }))
-
-initDB().then(() => {
-  app.listen(PORT, () => console.log(`Server on port ${PORT}`))
-})
+// 先啟動 HTTP server，背景重試連 DB
+app.listen(PORT, () => console.log(`Server on port ${PORT}`))
+initDB()
