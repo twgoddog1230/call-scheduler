@@ -10,14 +10,23 @@ export function formatWeekLabel(week: Week): string {
   return `第${week.weekNumber}週（${s.getMonth() + 1}/${s.getDate()}~${e.getMonth() + 1}/${e.getDate()}）`
 }
 
-/** 單週文字（複製用） */
+/** 單週文字（複製用，套用固定模板） */
 export function buildWeekText(week: Week, persons: Person[]): string {
-  const lines: string[] = [formatWeekLabel(week)]
-  for (const pair of week.pairs) {
-    const names = pair.members.map(id => personName(id, persons)).join(' & ')
-    lines.push(`  ${names}`)
-  }
-  return lines.join('\n')
+  const s = new Date(week.startDate)
+  const e = new Date(week.endDate)
+  const dateRange = `${s.getMonth() + 1}/${s.getDate()}–${e.getMonth() + 1}/${e.getDate()}`
+  const pairLines = week.pairs
+    .map(pair => ` ▸ ${pair.members.map(id => personName(id, persons)).join(' + ')}`)
+    .join('\n')
+  return `❤️第 ${week.weekNumber} 週（${dateRange}）
+小天使通話分配
+(筆記本有夥伴方便通話時間，自行跟對方約時間)❤️
+
+👍通話內容方向：主要傾聽對方生活困擾，關心最近5運親證，給予讚美肯定、陪伴、鼓勵持續親證或是跟上級求救
+
+${pairLines}
+
+請大家通話完成後並完成打卡就打勾✅`
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {
