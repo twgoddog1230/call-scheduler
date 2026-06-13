@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, Person, Settings } from '../types'
-import type { Pair } from '../types'
 import { buildSchedule, recalculateAfterLock, reshuffleWeekPairs } from '../utils/scheduler'
 
 function uuid() {
