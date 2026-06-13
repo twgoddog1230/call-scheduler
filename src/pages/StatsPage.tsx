@@ -13,145 +13,87 @@ export default function StatsPage() {
     )
   }
 
-  // Build pairing matrix: count how many times each pair appeared
-  const pairCount: Record<string, Record<string, number>> = {}
-  for (const p of persons) {
-    pairCount[p.id] = {}
-    for (const q of persons) {
-      pairCount[p.id][q.id] = 0
-    }
-  }
-
-  // Count appearances per person
-  const appearances: Record<string, number> = {}
-  const completed: Record<string, number> = {}
-  for (const p of persons) {
-    appearances[p.id] = 0
-    completed[p.id] = 0
-  }
+  // Build per-person pairing history: partnerId → { weekNumber, completed }
+  const pairingHistory: Record<string, { partnerId: string; weekNumber: number; completed: boolean }[]> = {}
+  for (const p of persons) pairingHistory[p.id] = []
 
   for (const week of weeks) {
     for (const pair of week.pairs) {
-      for (const id of pair.members) {
-        appearances[id] = (appearances[id] ?? 0) + 1
-        if (pair.completed) completed[id] = (completed[id] ?? 0) + 1
-      }
-      // count each unique pair combination
       for (let i = 0; i < pair.members.length; i++) {
-        for (let j = i + 1; j < pair.members.length; j++) {
-          const a = pair.members[i]
-          const b = pair.members[j]
-          if (pairCount[a] && pairCount[b] !== undefined) {
-            pairCount[a][b] = (pairCount[a][b] ?? 0) + 1
-            pairCount[b][a] = (pairCount[b][a] ?? 0) + 1
+        const me = pair.members[i]
+        for (let j = 0; j < pair.members.length; j++) {
+          if (i === j) continue
+          const partner = pair.members[j]
+          if (!pairingHistory[me]) continue
+          // Avoid duplicates (week + partner combination)
+          const already = pairingHistory[me].some(
+            h => h.partnerId === partner && h.weekNumber === week.weekNumber
+          )
+          if (!already) {
+            pairingHistory[me].push({
+              partnerId: partner,
+              weekNumber: week.weekNumber,
+              completed: pair.completed,
+            })
           }
         }
       }
     }
   }
 
-  const maxCount = Math.max(
-    1,
-    ...persons.flatMap(a =>
-      persons.filter(b => b.id !== a.id).map(b => pairCount[a.id]?.[b.id] ?? 0)
-    )
-  )
-
-  function cellColor(count: number, isSelf: boolean): string {
-    if (isSelf) return 'bg-gray-100 dark:bg-gray-800'
-    if (count === 0) return 'bg-white dark:bg-gray-900'
-    const intensity = Math.round((count / maxCount) * 5)
-    const shades = [
-      'bg-indigo-50 dark:bg-indigo-950',
-      'bg-indigo-100 dark:bg-indigo-900',
-      'bg-indigo-200 dark:bg-indigo-800',
-      'bg-indigo-300 dark:bg-indigo-700',
-      'bg-indigo-400 dark:bg-indigo-600',
-      'bg-indigo-500 dark:bg-indigo-500',
-    ]
-    return shades[Math.min(intensity, 5)]
-  }
-
-  function cellText(count: number, isSelf: boolean): string {
-    if (isSelf) return '–'
-    return count === 0 ? '' : String(count)
-  }
+  const personMap = Object.fromEntries(persons.map(p => [p.id, p.name]))
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 space-y-8">
-      {/* Pairing matrix */}
+      {/* Pairing records */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">配對矩陣</h2>
-        <p className="text-xs text-gray-400 mb-4">數字代表兩人搭配的次數，顏色越深次數越多</p>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">配對紀錄</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          <span className="text-red-500 font-medium">紅色</span>＝已完成通話（依週次排列）
+          <span className="text-green-500 font-medium">綠色</span>＝尚未完成
+        </p>
 
-        <div className="overflow-x-auto">
-          <table className="border-collapse text-center text-xs min-w-full">
-            <thead>
-              <tr>
-                <th className="w-12 p-1" />
-                {persons.map(p => (
-                  <th
-                    key={p.id}
-                    className="p-1 font-medium text-gray-600 dark:text-gray-300 max-w-[48px]"
-                  >
-                    <span className="block truncate" title={p.name}>{p.name}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {persons.map(a => (
-                <tr key={a.id}>
-                  <td className="p-1 font-medium text-gray-600 dark:text-gray-300 text-right pr-2 truncate max-w-[48px]" title={a.name}>
-                    {a.name}
-                  </td>
-                  {persons.map(b => {
-                    const isSelf = a.id === b.id
-                    const count = pairCount[a.id]?.[b.id] ?? 0
-                    return (
-                      <td
-                        key={b.id}
-                        className={`w-9 h-9 rounded text-gray-700 dark:text-gray-200 font-medium transition-colors
-                          ${cellColor(count, isSelf)}
-                        `}
-                      >
-                        {cellText(count, isSelf)}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        <div className="space-y-3">
+          {persons.map(person => {
+            const history = pairingHistory[person.id] ?? []
 
-      {/* Per-person stats */}
-      <section>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">個人統計</h2>
-        <div className="space-y-2">
-          {persons
-            .slice()
-            .sort((a, b) => (appearances[b.id] ?? 0) - (appearances[a.id] ?? 0))
-            .map(p => {
-              const total = appearances[p.id] ?? 0
-              const done = completed[p.id] ?? 0
-              const pct = total === 0 ? 0 : Math.round((done / total) * 100)
-              return (
-                <div key={p.id} className="flex items-center gap-3">
-                  <span className="w-20 text-sm text-gray-700 dark:text-gray-200 truncate flex-shrink-0">{p.name}</span>
-                  <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-indigo-500 h-2 rounded-full transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-400 w-20 text-right flex-shrink-0">
-                    {done}/{total} 次完成
-                  </span>
+            // Completed: sorted by week number
+            const completed = history
+              .filter(h => h.completed)
+              .sort((a, b) => a.weekNumber - b.weekNumber)
+
+            const completedIds = new Set(completed.map(h => h.partnerId))
+
+            // Not yet completed: everyone else (maintain person list order)
+            const notDone = persons
+              .filter(p => p.id !== person.id && !completedIds.has(p.id))
+
+            return (
+              <div key={person.id} className="flex items-start gap-2 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 w-14 flex-shrink-0 pt-0.5">
+                  {person.name}
+                </span>
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {completed.map(h => (
+                    <span
+                      key={h.partnerId}
+                      className="text-sm font-medium text-red-500 dark:text-red-400"
+                    >
+                      {personMap[h.partnerId] ?? h.partnerId}
+                    </span>
+                  ))}
+                  {notDone.map(p => (
+                    <span
+                      key={p.id}
+                      className="text-sm font-medium text-green-600 dark:text-green-400"
+                    >
+                      {p.name}
+                    </span>
+                  ))}
                 </div>
-              )
-            })}
+              </div>
+            )
+          })}
         </div>
       </section>
 
