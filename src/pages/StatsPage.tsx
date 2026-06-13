@@ -13,7 +13,20 @@ export default function StatsPage() {
     )
   }
 
-  // Build per-person pairing history: partnerId → { weekNumber, completed }
+  // "New week" = first week with no completed pairs (the just-arranged upcoming week)
+  const newWeek = weeks.find(w => w.pairs.every(p => !p.completed))
+  const newWeekMemberPairs = new Set<string>()
+  if (newWeek) {
+    for (const pair of newWeek.pairs) {
+      for (let i = 0; i < pair.members.length; i++) {
+        for (let j = 0; j < pair.members.length; j++) {
+          if (i !== j) newWeekMemberPairs.add(`${pair.members[i]}|${pair.members[j]}`)
+        }
+      }
+    }
+  }
+
+  // Build per-person pairing history
   const pairingHistory: Record<string, { partnerId: string; weekNumber: number; completed: boolean }[]> = {}
   for (const p of persons) pairingHistory[p.id] = []
 
@@ -25,7 +38,6 @@ export default function StatsPage() {
           if (i === j) continue
           const partner = pair.members[j]
           if (!pairingHistory[me]) continue
-          // Avoid duplicates (week + partner combination)
           const already = pairingHistory[me].some(
             h => h.partnerId === partner && h.weekNumber === week.weekNumber
           )
@@ -48,25 +60,36 @@ export default function StatsPage() {
       {/* Pairing records */}
       <section>
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">配對紀錄</h2>
-        <p className="text-xs text-gray-400 mb-4">
-          <span className="text-red-500 font-medium">紅色</span>＝已完成通話（依週次排列）
-          <span className="text-green-500 font-medium">綠色</span>＝尚未完成
+        <p className="text-xs text-gray-400 mb-4 flex flex-wrap gap-x-3">
+          <span><span className="text-red-500 font-medium">紅</span>＝已完成</span>
+          <span><span className="text-blue-500 font-medium">藍</span>＝本週搭檔</span>
+          <span><span className="text-green-500 font-medium">綠</span>＝尚未排到</span>
         </p>
 
         <div className="space-y-3">
           {persons.map(person => {
             const history = pairingHistory[person.id] ?? []
 
-            // Completed: sorted by week number
+            // Red: completed, sorted by week
             const completed = history
               .filter(h => h.completed)
               .sort((a, b) => a.weekNumber - b.weekNumber)
-
             const completedIds = new Set(completed.map(h => h.partnerId))
 
-            // Not yet completed: everyone else (maintain person list order)
-            const notDone = persons
-              .filter(p => p.id !== person.id && !completedIds.has(p.id))
+            // Blue: in new week, not completed
+            const blue = persons.filter(p =>
+              p.id !== person.id &&
+              !completedIds.has(p.id) &&
+              newWeekMemberPairs.has(`${person.id}|${p.id}`)
+            )
+            const blueIds = new Set(blue.map(p => p.id))
+
+            // Green: everyone else (not completed, not in new week)
+            const green = persons.filter(p =>
+              p.id !== person.id &&
+              !completedIds.has(p.id) &&
+              !blueIds.has(p.id)
+            )
 
             return (
               <div key={person.id} className="flex items-start gap-2 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -75,18 +98,17 @@ export default function StatsPage() {
                 </span>
                 <div className="flex flex-wrap gap-x-2 gap-y-1">
                   {completed.map(h => (
-                    <span
-                      key={h.partnerId}
-                      className="text-sm font-medium text-red-500 dark:text-red-400"
-                    >
+                    <span key={h.partnerId} className="text-sm font-medium text-red-500 dark:text-red-400">
                       {personMap[h.partnerId] ?? h.partnerId}
                     </span>
                   ))}
-                  {notDone.map(p => (
-                    <span
-                      key={p.id}
-                      className="text-sm font-medium text-green-600 dark:text-green-400"
-                    >
+                  {blue.map(p => (
+                    <span key={p.id} className="text-sm font-medium text-blue-500 dark:text-blue-400">
+                      {p.name}
+                    </span>
+                  ))}
+                  {green.map(p => (
+                    <span key={p.id} className="text-sm font-medium text-green-600 dark:text-green-400">
                       {p.name}
                     </span>
                   ))}
