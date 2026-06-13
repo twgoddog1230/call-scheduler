@@ -9,7 +9,6 @@ export function getWeekStarts(startDate: string, endDate: string): Date[] {
   const start = new Date(startDate)
   const end = new Date(endDate)
 
-  // Advance to next Monday if not already Monday
   const day = start.getDay()
   if (day !== 1) {
     const diff = day === 0 ? 1 : 8 - day
@@ -25,59 +24,17 @@ export function getWeekStarts(startDate: string, endDate: string): Date[] {
   return weeks
 }
 
-/** Round-robin schedule for N people.
- *  Returns an array of rounds; each round is an array of [id, id] pairs.
- *  For odd N, one group per round is a triple.
+/**
+ * Build a full schedule across all weeks.
+ *
+ * Preserves completed weeks and uses their pairs as global history so
+ * future weeks never repeat a pairing until all combinations are exhausted.
  */
-export function roundRobin(personIds: string[]): string[][][] {
-  const ids = [...personIds]
-  const odd = ids.length % 2 !== 0
-  if (odd) ids.push('__bye__')  // virtual bye slot
-
-  const n = ids.length
-  const rounds: string[][][] = []
-
-  for (let r = 0; r < n - 1; r++) {
-    const round: string[][] = []
-    for (let i = 0; i < n / 2; i++) {
-      const a = ids[i]
-      const b = ids[n - 1 - i]
-      if (a !== '__bye__' && b !== '__bye__') {
-        round.push([a, b])
-      } else {
-        // the real person gets a bye — skip adding a pair
-      }
-    }
-
-    // If odd, the person who had bye joins the last real pair to form a triple
-    if (odd) {
-      const byeIndex = ids.indexOf('__bye__')
-      let realPerson: string | null = null
-      if (byeIndex < n / 2) {
-        realPerson = ids[n - 1 - byeIndex]
-      } else {
-        realPerson = ids[n - 1 - byeIndex]
-      }
-      if (realPerson && round.length > 0) {
-        round[round.length - 1].push(realPerson)
-      }
-    }
-
-    rounds.push(round)
-
-    // Rotate: keep ids[0] fixed, rotate the rest
-    const last = ids.pop()!
-    ids.splice(1, 0, last)
-  }
-
-  return rounds
-}
-
-/** Build a full schedule across all weeks with cycle tracking */
 export function buildSchedule(
   persons: Person[],
   startDate: string,
   endDate: string,
+  existingWeeks: Week[] = [],
 ): Week[] {
   if (persons.length < 2) return []
 
@@ -85,36 +42,59 @@ export function buildSchedule(
   if (weekStarts.length === 0) return []
 
   const personIds = persons.map(p => p.id)
+  const totalUniquePairs = (personIds.length * (personIds.length - 1)) / 2
 
-  // Shuffle once for randomness
-  const shuffled = shuffle([...personIds])
-  const rounds = roundRobin(shuffled)
-  const cycleLength = rounds.length  // N-1 rounds per cycle
+  // Map existing weeks by start date for quick lookup
+  const existingByStart = new Map<string, Week>()
+  for (const w of existingWeeks) {
+    existingByStart.set(w.startDate, w)
+  }
 
-  const weeks: Week[] = weekStarts.map((monday, idx) => {
-    const cycleIndex = Math.floor(idx / cycleLength)
-    const roundIndex = idx % cycleLength
+  // Global pair tracker — resets when all combinations are exhausted
+  const globalUsedPairs = new Set<string>()
+  let cycleNumber = 1
 
-    // Re-shuffle at the start of each new cycle (but keep it deterministic per cycle)
-    let roundOrder = rounds
-    if (cycleIndex > 0) {
-      const cycleShuffled = seededShuffle([...personIds], cycleIndex)
-      roundOrder = roundRobin(cycleShuffled)
-    }
-
-    const round = roundOrder[roundIndex] ?? roundOrder[0]
-
+  return weekStarts.map((monday, idx) => {
+    const startISO = toISO(monday)
     const sunday = new Date(monday)
     sunday.setDate(monday.getDate() + 6)
+    const endISO = toISO(sunday)
+
+    const existing = existingByStart.get(startISO)
+    const hasCompleted = existing?.pairs.some(p => p.completed) ?? false
+
+    // Preserve completed weeks as-is; track their pairs as used history
+    if (hasCompleted && existing) {
+      for (const pair of existing.pairs) {
+        globalUsedPairs.add(pairKey(pair.members))
+      }
+      if (globalUsedPairs.size >= totalUniquePairs) {
+        globalUsedPairs.clear()
+        cycleNumber++
+      }
+      return { ...existing, weekNumber: idx + 1, cycleNumber }
+    }
+
+    // Start a new cycle when all pairs have been used
+    if (globalUsedPairs.size >= totalUniquePairs) {
+      globalUsedPairs.clear()
+      cycleNumber++
+    }
+
+    // Greedy assign with randomised order for variety
+    const newPairMembers = greedyAssign(shuffle([...personIds]), globalUsedPairs)
+    newPairMembers.forEach(m => globalUsedPairs.add(pairKey(m)))
+
+    const existingPairs = existing?.pairs ?? []
 
     return {
-      id: uuid(),
+      id: existing?.id ?? uuid(),
       weekNumber: idx + 1,
-      cycleNumber: cycleIndex + 1,
-      startDate: toISO(monday),
-      endDate: toISO(sunday),
-      pairs: round.map(members => ({
-        id: uuid(),
+      cycleNumber,
+      startDate: startISO,
+      endDate: endISO,
+      pairs: newPairMembers.map((members, i) => ({
+        id: existingPairs[i]?.id ?? uuid(),
         members,
         locked: false,
         completed: false,
@@ -122,14 +102,12 @@ export function buildSchedule(
       })),
     }
   })
-
-  return weeks
 }
 
 /**
  * When a pair is locked/changed in a week, recalculate unlocked pairs in that
- * week AND recalculate unlocked pairs in the same cycle so that no two people
- * are paired more than once per cycle (best-effort greedy).
+ * cycle so no two people are paired more than once per cycle.
+ * Completed pairs are also treated as fixed constraints.
  */
 export function recalculateAfterLock(
   weeks: Week[],
@@ -142,33 +120,27 @@ export function recalculateAfterLock(
   const cycle = changed.cycleNumber
   const cycleWeeks = weeks.filter(w => w.cycleNumber === cycle)
 
-  // Collect all locked pairs across cycle
-  const lockedPairs: string[][] = []
+  // Treat locked and completed pairs as immovable constraints for this cycle
+  const usedPairs = new Set<string>()
   for (const w of cycleWeeks) {
     for (const p of w.pairs) {
-      if (p.locked) lockedPairs.push(p.members)
+      if (p.locked || p.completed) usedPairs.add(pairKey(p.members))
     }
   }
 
-  // Build used-pairs set for the cycle from locked pairs
-  const usedPairs = new Set<string>(lockedPairs.map(m => pairKey(m)))
-
-  // Reassign unlocked pairs week by week within the cycle
   const updatedCycleWeeks = cycleWeeks.map(week => {
-    const lockedMembers = new Set(
-      week.pairs.filter(p => p.locked).flatMap(p => p.members)
+    const fixedMembers = new Set(
+      week.pairs.filter(p => p.locked || p.completed).flatMap(p => p.members)
     )
-    const unlocked = personIds.filter(id => !lockedMembers.has(id))
+    const unlocked = personIds.filter(id => !fixedMembers.has(id))
 
     if (unlocked.length === 0) return week
 
-    const newPairs = greedyAssign(unlocked, usedPairs)
-
-    // Mark these new pairs as used
+    const newPairs = greedyAssign(shuffle([...unlocked]), usedPairs)
     newPairs.forEach(m => usedPairs.add(pairKey(m)))
 
-    const lockedPairsInWeek = week.pairs.filter(p => p.locked)
-    const unlockedPairsInWeek = week.pairs.filter(p => !p.locked)
+    const fixedPairsInWeek = week.pairs.filter(p => p.locked || p.completed)
+    const unlockedPairsInWeek = week.pairs.filter(p => !p.locked && !p.completed)
 
     const rebuiltUnlocked: Pair[] = newPairs.map((members, i) => ({
       id: unlockedPairsInWeek[i]?.id ?? uuid(),
@@ -178,7 +150,7 @@ export function recalculateAfterLock(
       note: unlockedPairsInWeek[i]?.note ?? '',
     }))
 
-    return { ...week, pairs: [...lockedPairsInWeek, ...rebuiltUnlocked] }
+    return { ...week, pairs: [...fixedPairsInWeek, ...rebuiltUnlocked] }
   })
 
   return weeks.map(w => {
@@ -187,34 +159,37 @@ export function recalculateAfterLock(
   })
 }
 
-/** Greedy pair assignment: minimize repeated pairs */
+/**
+ * Greedy pair assignment — avoids pairs already in usedPairs.
+ * Among equally-scored candidates, picks randomly for variety.
+ */
 function greedyAssign(ids: string[], usedPairs: Set<string>): string[][] {
   const remaining = [...ids]
   const result: string[][] = []
 
   while (remaining.length >= 2) {
     const a = remaining.shift()!
-    let best = -1
     let bestScore = -Infinity
+    const bestCandidates: number[] = []
 
     for (let i = 0; i < remaining.length; i++) {
-      const b = remaining[i]
-      const score = usedPairs.has(pairKey([a, b])) ? -1 : 1
+      const score = usedPairs.has(pairKey([a, remaining[i]])) ? -1 : 1
       if (score > bestScore) {
         bestScore = score
-        best = i
+        bestCandidates.length = 0
+        bestCandidates.push(i)
+      } else if (score === bestScore) {
+        bestCandidates.push(i)
       }
     }
 
-    const b = remaining.splice(best, 1)[0]
-    result.push([a, b])
+    const chosen = bestCandidates[Math.floor(Math.random() * bestCandidates.length)]
+    result.push([a, remaining.splice(chosen, 1)[0]])
   }
 
-  // If one person left (odd), add to last pair
-  if (remaining.length === 1) {
-    if (result.length > 0) {
-      result[result.length - 1].push(remaining[0])
-    }
+  // Odd person out joins the last pair as a triple
+  if (remaining.length === 1 && result.length > 0) {
+    result[result.length - 1].push(remaining[0])
   }
 
   return result
@@ -230,17 +205,6 @@ function shuffle<T>(arr: T[]): T[] {
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
-}
-
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const s = arr.slice()
-  let h = seed
-  for (let i = s.length - 1; i > 0; i--) {
-    h = (h * 1664525 + 1013904223) & 0xffffffff
-    const j = Math.abs(h) % (i + 1)
-    ;[s[i], s[j]] = [s[j], s[i]]
-  }
-  return s
 }
 
 function toISO(date: Date): string {

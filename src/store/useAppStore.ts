@@ -56,10 +56,10 @@ export const useAppStore = create<AppState>()(
       },
 
       generateSchedule: () => {
-        const { settings, persons } = get()
+        const { settings, persons, weeks } = get()
         if (!settings.startDate || !settings.endDate || persons.length < 2) return
-        const weeks = buildSchedule(persons, settings.startDate, settings.endDate)
-        set({ weeks, history: [] })
+        const newWeeks = buildSchedule(persons, settings.startDate, settings.endDate, weeks)
+        set({ weeks: newWeeks, history: [] })
       },
 
       reshuffleWeek: (weekId) => {
