@@ -105,6 +105,52 @@ export function buildSchedule(
 }
 
 /**
+ * Reshuffle unlocked pairs in one week, respecting all completed/locked
+ * pairs from every other week as global constraints.
+ */
+export function reshuffleWeekPairs(
+  weeks: Week[],
+  weekId: string,
+  persons: Person[],
+): Week[] {
+  const target = weeks.find(w => w.id === weekId)
+  if (!target) return weeks
+
+  const personIds = persons.map(p => p.id)
+
+  // All completed/locked pairs from every week (including this one's fixed pairs)
+  const globalUsedPairs = new Set<string>()
+  for (const w of weeks) {
+    for (const p of w.pairs) {
+      if (p.completed || p.locked) globalUsedPairs.add(pairKey(p.members))
+    }
+  }
+
+  const fixedMembers = new Set(
+    target.pairs.filter(p => p.locked || p.completed).flatMap(p => p.members)
+  )
+  const unlocked = personIds.filter(id => !fixedMembers.has(id))
+  if (unlocked.length === 0) return weeks
+
+  const newPairMembers = greedyAssign(shuffle([...unlocked]), globalUsedPairs)
+  const fixedPairs = target.pairs.filter(p => p.locked || p.completed)
+  const unlockedPairs = target.pairs.filter(p => !p.locked && !p.completed)
+
+  const rebuiltPairs: Pair[] = [
+    ...fixedPairs,
+    ...newPairMembers.map((members, i) => ({
+      id: unlockedPairs[i]?.id ?? uuid(),
+      members,
+      locked: false,
+      completed: false,
+      note: unlockedPairs[i]?.note ?? '',
+    })),
+  ]
+
+  return weeks.map(w => w.id === weekId ? { ...w, pairs: rebuiltPairs } : w)
+}
+
+/**
  * When a pair is locked/changed in a week, recalculate unlocked pairs in that
  * cycle so no two people are paired more than once per cycle.
  * Completed pairs are also treated as fixed constraints.

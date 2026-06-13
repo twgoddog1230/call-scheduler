@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, Person, Settings } from '../types'
 import type { Pair } from '../types'
-import { buildSchedule, recalculateAfterLock } from '../utils/scheduler'
+import { buildSchedule, recalculateAfterLock, reshuffleWeekPairs } from '../utils/scheduler'
 
 function uuid() {
   return Math.random().toString(36).slice(2, 10)
@@ -64,35 +64,8 @@ export const useAppStore = create<AppState>()(
 
       reshuffleWeek: (weekId) => {
         const { weeks, persons } = get()
-        const week = weeks.find(w => w.id === weekId)
-        if (!week) return
-
-        const lockedMembers = new Set(
-          week.pairs.filter(p => p.locked).flatMap(p => p.members)
-        )
-        const unlocked = persons.map(p => p.id).filter(id => !lockedMembers.has(id))
-
-        // Simple reshuffle of unlocked members
-        const shuffled = [...unlocked].sort(() => Math.random() - 0.5)
-        const newPairs: Pair[] = []
-        for (let i = 0; i < shuffled.length; i += 2) {
-          const members = i + 1 < shuffled.length
-            ? [shuffled[i], shuffled[i + 1]]
-            : [shuffled[i]]
-
-          if (members.length === 1 && newPairs.length > 0) {
-            newPairs[newPairs.length - 1].members.push(members[0])
-          } else {
-            newPairs.push({ id: uuid(), members, locked: false, completed: false, note: '' })
-          }
-        }
-
-        const lockedPairs = week.pairs.filter(p => p.locked)
-        set(state => ({
-          weeks: state.weeks.map(w =>
-            w.id === weekId ? { ...w, pairs: [...lockedPairs, ...newPairs] } : w
-          ),
-        }))
+        const newWeeks = reshuffleWeekPairs(weeks, weekId, persons)
+        set({ weeks: newWeeks })
       },
 
       lockPair: (weekId, pairId, locked) => {
