@@ -245,6 +245,46 @@ function pairKey(members: string[]): string {
   return [...members].sort().join('|')
 }
 
+/**
+ * Builds per-person partner history used to warn against re-picking someone
+ * during manual edit: pairs locked/completed within the same cycle (a real
+ * duplicate) vs. pairs completed in any past cycle (informational only).
+ */
+export function getPartnerHistory(
+  weeks: Week[],
+  cycleNumber: number,
+  excludePairId: string,
+): { sameCycleBlocked: Map<string, Set<string>>; everCompleted: Map<string, Set<string>> } {
+  const sameCycleBlocked = new Map<string, Set<string>>()
+  const everCompleted = new Map<string, Set<string>>()
+
+  const link = (map: Map<string, Set<string>>, a: string, b: string) => {
+    if (!map.has(a)) map.set(a, new Set())
+    map.get(a)!.add(b)
+  }
+
+  for (const w of weeks) {
+    for (const p of w.pairs) {
+      if (p.id === excludePairId) continue
+      for (let i = 0; i < p.members.length; i++) {
+        for (let j = i + 1; j < p.members.length; j++) {
+          const [x, y] = [p.members[i], p.members[j]]
+          if (p.completed) {
+            link(everCompleted, x, y)
+            link(everCompleted, y, x)
+          }
+          if (w.cycleNumber === cycleNumber && (p.locked || p.completed)) {
+            link(sameCycleBlocked, x, y)
+            link(sameCycleBlocked, y, x)
+          }
+        }
+      }
+    }
+  }
+
+  return { sameCycleBlocked, everCompleted }
+}
+
 function shuffle<T>(arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))

@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import type { Week, Pair } from '../types'
 import { buildWeekText, copyTextToClipboard, drawWeekScreenshot, formatWeekLabel } from '../utils/export'
+import { getPartnerHistory } from '../utils/scheduler'
 
 function PairCard({ week, pair }: { week: Week; pair: Pair }) {
-  const { persons, toggleCompleted, lockPair, updatePair, updateNote } = useAppStore()
+  const { persons, weeks, toggleCompleted, lockPair, updatePair, updateNote } = useAppStore()
   const [editMode, setEditMode] = useState(false)
   const [noteMode, setNoteMode] = useState(false)
   const [noteDraft, setNoteDraft] = useState(pair.note)
   const [selectedIds, setSelectedIds] = useState<string[]>(pair.members)
+
+  const { sameCycleBlocked, everCompleted } = useMemo(
+    () => getPartnerHistory(weeks, week.cycleNumber, pair.id),
+    [weeks, week.cycleNumber, pair.id]
+  )
 
   const memberNames = pair.members
     .map(id => persons.find(p => p.id === id)?.name ?? id)
@@ -115,21 +121,37 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
       {editMode && (
         <div className="mt-2 ml-7 space-y-2">
           <p className="text-xs text-gray-500 dark:text-gray-400">選擇成員（至少 2 人）：</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 flex flex-wrap gap-x-3">
+            <span>灰＝本輪已配對（不可選）</span>
+            <span className="text-red-400 dark:text-red-500">紅框＝過去輪次已完成</span>
+          </p>
           <div className="flex flex-wrap gap-2">
-            {persons.map(p => (
-              <button
-                key={p.id}
-                onClick={() => toggleMember(p.id)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-all
-                  ${selectedIds.includes(p.id)
-                    ? 'bg-indigo-600 border-indigo-600 text-white'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
-                  }
-                `}
-              >
-                {p.name}
-              </button>
-            ))}
+            {persons.map(p => {
+              const isSelected = selectedIds.includes(p.id)
+              const blocked = !isSelected && selectedIds.some(id => sameCycleBlocked.get(id)?.has(p.id))
+              const flagged = !isSelected && !blocked && selectedIds.some(id => everCompleted.get(id)?.has(p.id))
+
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { if (!blocked) toggleMember(p.id) }}
+                  disabled={blocked}
+                  title={blocked ? '本輪已配對過' : flagged ? '過去輪次已完成配對' : undefined}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-all
+                    ${isSelected
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : blocked
+                        ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600'
+                        : flagged
+                          ? 'border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:border-red-400'
+                          : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
+                    }
+                  `}
+                >
+                  {p.name}
+                </button>
+              )
+            })}
           </div>
           <div className="flex gap-2">
             <button
