@@ -16,10 +16,11 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
     [weeks, week.cycleNumber, pair.id]
   )
 
-  const sameWeekTaken = useMemo(() => {
+  const sameWeekLockedTaken = useMemo(() => {
     const taken = new Set<string>()
     for (const p of week.pairs) {
       if (p.id === pair.id) continue
+      if (!p.locked && !p.completed) continue
       for (const m of p.members) taken.add(m)
     }
     return taken
@@ -131,33 +132,32 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
         <div className="mt-2 ml-7 space-y-2">
           <p className="text-xs text-gray-500 dark:text-gray-400">選擇成員（至少 2 人）：</p>
           <p className="text-[10px] text-gray-400 dark:text-gray-500 flex flex-wrap gap-x-3">
-            <span className="text-amber-500 dark:text-amber-400">橘＝本週已排入其他組（選了會換人）</span>
             <span>灰＝本輪已配對（不可選）</span>
             <span className="text-red-400 dark:text-red-500">紅框＝過去輪次已完成</span>
           </p>
           <div className="flex flex-wrap gap-2">
             {persons.map(p => {
               const isSelected = selectedIds.includes(p.id)
-              const blocked = !isSelected && selectedIds.some(id => sameCycleBlocked.get(id)?.has(p.id))
-              const takenThisWeek = !isSelected && !blocked && sameWeekTaken.has(p.id)
-              const flagged = !isSelected && !blocked && !takenThisWeek && selectedIds.some(id => everCompleted.get(id)?.has(p.id))
+              const blocked = !isSelected && (
+                sameWeekLockedTaken.has(p.id) ||
+                selectedIds.some(id => sameCycleBlocked.get(id)?.has(p.id))
+              )
+              const flagged = !isSelected && !blocked && selectedIds.some(id => everCompleted.get(id)?.has(p.id))
 
               return (
                 <button
                   key={p.id}
                   onClick={() => { if (!blocked) toggleMember(p.id) }}
                   disabled={blocked}
-                  title={blocked ? '本輪已配對過' : takenThisWeek ? '本週已排入其他組，選了會換人' : flagged ? '過去輪次已完成配對' : undefined}
+                  title={blocked ? '本輪已配對過' : flagged ? '過去輪次已完成配對' : undefined}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-all
                     ${isSelected
                       ? 'bg-indigo-600 border-indigo-600 text-white'
                       : blocked
                         ? 'opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600'
-                        : takenThisWeek
-                          ? 'border-amber-300 dark:border-amber-700 text-amber-500 dark:text-amber-400 hover:border-amber-400'
-                          : flagged
-                            ? 'border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:border-red-400'
-                            : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
+                        : flagged
+                          ? 'border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:border-red-400'
+                          : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
                     }
                   `}
                 >
