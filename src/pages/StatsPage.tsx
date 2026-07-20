@@ -26,11 +26,17 @@ export default function StatsPage() {
     }
   }
 
+  // Scope pairing history to the current cycle only — once a cycle finishes,
+  // everyone has "completed" with everyone, which would otherwise permanently
+  // mask blue/green in later cycles and duplicate names across cycles.
+  const currentCycle = newWeek?.cycleNumber ?? Math.max(...weeks.map(w => w.cycleNumber), 1)
+
   // Build per-person pairing history
   const pairingHistory: Record<string, { partnerId: string; weekNumber: number; completed: boolean }[]> = {}
   for (const p of persons) pairingHistory[p.id] = []
 
   for (const week of weeks) {
+    if (week.cycleNumber !== currentCycle) continue
     for (const pair of week.pairs) {
       for (let i = 0; i < pair.members.length; i++) {
         const me = pair.members[i]
