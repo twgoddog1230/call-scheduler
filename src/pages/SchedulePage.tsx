@@ -132,7 +132,7 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
         <div className="mt-2 ml-7 space-y-2">
           <p className="text-xs text-gray-500 dark:text-gray-400">選擇成員（至少 2 人）：</p>
           <p className="text-[10px] text-gray-400 dark:text-gray-500 flex flex-wrap gap-x-3">
-            <span>灰＝本輪已配對（提醒，仍可選）</span>
+            <span className="text-amber-500 dark:text-amber-400">橘框＝本輪已配對（提醒，仍可選）</span>
             <span className="text-red-400 dark:text-red-500">紅框＝過去輪次已完成</span>
           </p>
           <div className="flex flex-wrap gap-2">
@@ -153,7 +153,7 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
                     ${isSelected
                       ? 'bg-indigo-600 border-indigo-600 text-white'
                       : repeated
-                        ? 'border-gray-400 dark:border-gray-500 text-gray-500 dark:text-gray-400 hover:border-indigo-400'
+                        ? 'border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:border-amber-400'
                         : flagged
                           ? 'border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:border-red-400'
                           : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
