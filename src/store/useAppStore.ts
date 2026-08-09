@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, Person, Settings } from '../types'
 import { buildSchedule, recalculateAfterLock, reshuffleWeekPairs } from '../utils/scheduler'
+import { DEFAULT_ANNOUNCEMENT, DEFAULT_CLOSING_NOTE } from '../utils/export'
 
 function uuid() {
   return Math.random().toString(36).slice(2, 10)
@@ -11,6 +12,8 @@ const defaultSettings: Settings = {
   startDate: '',
   endDate: '',
   defaultGroupSize: 2,
+  announcement: DEFAULT_ANNOUNCEMENT,
+  closingNote: DEFAULT_CLOSING_NOTE,
 }
 
 const HISTORY_LIMIT = 20

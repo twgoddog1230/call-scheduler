@@ -24,6 +24,8 @@ export interface Settings {
   startDate: string   // ISO date string
   endDate: string     // ISO date string
   defaultGroupSize: 2 | 3
+  announcement: string // 開頭布達說明（含通話內容方向），套用於「複製本週」文字
+  closingNote: string  // 結尾提醒語，套用於「複製本週」文字
 }
 
 export interface AppState {

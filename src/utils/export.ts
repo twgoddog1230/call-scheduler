@@ -1,8 +1,15 @@
-import type { Week, Person } from '../types'
+import type { Week, Person, Settings } from '../types'
 
 function personName(id: string, persons: Person[]): string {
   return persons.find(p => p.id === id)?.name ?? id
 }
+
+export const DEFAULT_ANNOUNCEMENT = `小天使通話分配
+(筆記本有夥伴方便通話時間，自行跟對方約時間)❤️
+
+👍通話內容方向：主要傾聽對方生活困擾，關心最近5運親證，給予讚美肯定、陪伴、鼓勵持續親證或是跟上級求救`
+
+export const DEFAULT_CLOSING_NOTE = `請大家通話完成後並完成打卡就打勾✅`
 
 export function formatWeekLabel(week: Week): string {
   const s = new Date(week.startDate)
@@ -10,23 +17,26 @@ export function formatWeekLabel(week: Week): string {
   return `第${week.weekNumber}週（${s.getMonth() + 1}/${s.getDate()}~${e.getMonth() + 1}/${e.getDate()}）`
 }
 
-/** 單週文字（複製用，套用固定模板） */
-export function buildWeekText(week: Week, persons: Person[]): string {
+/** 單週文字（複製用，開頭布達說明與結尾提醒語套用設定頁的可編輯內容） */
+export function buildWeekText(
+  week: Week,
+  persons: Person[],
+  settings: Pick<Settings, 'announcement' | 'closingNote'>,
+): string {
   const s = new Date(week.startDate)
   const e = new Date(week.endDate)
   const dateRange = `${s.getMonth() + 1}/${s.getDate()}–${e.getMonth() + 1}/${e.getDate()}`
   const pairLines = week.pairs
     .map(pair => ` ▸ ${pair.members.map(id => personName(id, persons)).join(' + ')}`)
     .join('\n')
+  const announcement = settings.announcement ?? DEFAULT_ANNOUNCEMENT
+  const closingNote = settings.closingNote ?? DEFAULT_CLOSING_NOTE
   return `❤️第 ${week.weekNumber} 週（${dateRange}）
-小天使通話分配
-(筆記本有夥伴方便通話時間，自行跟對方約時間)❤️
-
-👍通話內容方向：主要傾聽對方生活困擾，關心最近5運親證，給予讚美肯定、陪伴、鼓勵持續親證或是跟上級求救
+${announcement}
 
 ${pairLines}
 
-請大家通話完成後並完成打卡就打勾✅`
+${closingNote}`
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {

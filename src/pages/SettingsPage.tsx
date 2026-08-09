@@ -176,6 +176,32 @@ export default function SettingsPage() {
         {persons.length >= 2 && <p className="mt-2 text-xs text-gray-400">可拖拉調整排序</p>}
       </section>
 
+      {/* 布達文字設定 */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">布達文字設定</h2>
+        <p className="text-xs text-gray-400 mb-3">套用於「複製本週」的文字內容，週次、日期、配對名單為固定格式</p>
+        <div className="space-y-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-gray-500 dark:text-gray-400">開頭說明</span>
+            <textarea
+              value={settings.announcement}
+              onChange={e => updateSettings({ announcement: e.target.value })}
+              rows={4}
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-gray-500 dark:text-gray-400">結尾提醒</span>
+            <textarea
+              value={settings.closingNote}
+              onChange={e => updateSettings({ closingNote: e.target.value })}
+              rows={2}
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+            />
+          </label>
+        </div>
+      </section>
+
       {/* Generate */}
       <section>
         <button

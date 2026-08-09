@@ -200,14 +200,14 @@ function PairCard({ week, pair }: { week: Week; pair: Pair }) {
 }
 
 function WeekCard({ week }: { week: Week }) {
-  const { reshuffleWeek, persons } = useAppStore()
+  const { reshuffleWeek, persons, settings } = useAppStore()
   const allDone = week.pairs.every(p => p.completed)
   const someDone = week.pairs.some(p => p.completed)
   const [copySuccess, setCopySuccess] = useState(false)
   const [screenshotLoading, setScreenshotLoading] = useState(false)
 
   async function handleCopy() {
-    await copyTextToClipboard(buildWeekText(week, persons))
+    await copyTextToClipboard(buildWeekText(week, persons, settings))
     setCopySuccess(true)
     setTimeout(() => setCopySuccess(false), 2000)
   }
