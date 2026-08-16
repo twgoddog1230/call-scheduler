@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import type { Week, Pair } from '../types'
 import { buildWeekText, copyTextToClipboard, drawWeekScreenshot, formatWeekLabel } from '../utils/export'
@@ -287,6 +287,16 @@ function WeekCard({ week }: { week: Week }) {
 export default function SchedulePage() {
   const { weeks, history, undo } = useAppStore()
   const cycles = Array.from(new Set(weeks.map(w => w.cycleNumber)))
+  const pendingWeek = weeks.find(w => !w.pairs.every(p => p.completed))
+
+  // 開啟這個分頁時，直接定位到第一個尚未全部完成的週，不用每次手動往下滑
+  useEffect(() => {
+    if (!pendingWeek) return
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`week-${pendingWeek.id}`)?.scrollIntoView({ block: 'start' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   if (weeks.length === 0) {
     return (
@@ -326,7 +336,11 @@ export default function SchedulePage() {
             <div className="space-y-3">
               {weeks
                 .filter(w => w.cycleNumber === cycle)
-                .map(week => <WeekCard key={week.id} week={week} />)
+                .map(week => (
+                  <div key={week.id} id={`week-${week.id}`} className="scroll-mt-24">
+                    <WeekCard week={week} />
+                  </div>
+                ))
               }
             </div>
           </div>
