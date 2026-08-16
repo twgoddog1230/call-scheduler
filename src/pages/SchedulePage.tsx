@@ -287,9 +287,14 @@ function WeekCard({ week }: { week: Week }) {
 export default function SchedulePage() {
   const { weeks, history, undo } = useAppStore()
   const cycles = Array.from(new Set(weeks.map(w => w.cycleNumber)))
-  const pendingWeek = weeks.find(w => !w.pairs.every(p => p.completed))
 
-  // 開啟這個分頁時，直接定位到第一個尚未全部完成的週，不用每次手動往下滑
+  // 定位到「最後一個已全部完成的週」的下一週 —— 忽略中間漏勾的零星未完成組，
+  // 才不會被單一漏勾卡在進度前緣之前
+  let lastCompletedIdx = -1
+  weeks.forEach((w, i) => { if (w.pairs.every(p => p.completed)) lastCompletedIdx = i })
+  const pendingWeek = weeks[lastCompletedIdx + 1]
+
+  // 開啟這個分頁時，直接定位到進度前緣，不用每次手動往下滑
   useEffect(() => {
     if (!pendingWeek) return
     const raf = requestAnimationFrame(() => {
